@@ -1,38 +1,49 @@
 import pandas as pd
 import io_file
-from model import BagWord
 from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
 from sklearn.feature_extraction.text import HashingVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC, LinearSVC
+import time
 
 
-df = io_file.read_corpora_file("data/newsCorpora.shuffled.csv")
-#df = io_file.read_corpora_file("data/corpora_small.csv")
-print(df.head(1))
+if __name__ == "__main__":
+    df = io_file.read_corpora_file("data/newsCorpora.shuffled.csv")
 
+    df_train, df_dev, df_test = io_file.split_train_dev_test(df)
+    train_all = True
+    if train_all:
+        data_train = df_train.loc[:, "title"]
+        y_train = df_train.loc[0:, "category"]
+    else:
+        data_train = df_train.loc[:2000, "title"]
+        y_train = df_train.loc[0:2000, "category"]
+    data_test = df_dev.loc[:, "title"]
+    y_test = df_dev.loc[:, "category"]
 
-bag = BagWord()
-# record word to dictionary
-df.apply(lambda s: bag.add_line(s["title"]), axis=1)
-#bag.add_line(df.loc[0, "title"])
-#bag.add_line(df.loc[1, "title"])
+    vectorizer = HashingVectorizer(stop_words='english')
+    x_train = vectorizer.transform(data_train)
 
+    # build and train
+    classifiers = []
 
-df_train, df_dev, df_test = io_file.split_train_dev_test(df)
+    #classifiers.append((KNeighborsClassifier(n_neighbors=10), "KNN"))
+    classifiers.append((LogisticRegression(), "Logistic Reg"))
+    classifiers.append((LinearSVC(C=0.1), "linear SVM"))
+    #classifiers.append((SVC(C=0.01), "SVM"))
 
-#df_test = df_train
-x = bag.transform_lines(df_train.loc[0:1000, "title"].values)
-# train
-classifier = KNeighborsClassifier(n_neighbors=1)
-classifier.fit(x, df_train.loc[0:1000, "category"])
+    for clf, clf_name in classifiers:
+        start_time = time.time()
+        clf.fit(x_train, y_train)
 
+        # test
+        x_test = vectorizer.transform(data_test)
 
-#tmp = bag.transform_lines([df_train.loc[2, "title"]])
-x_test = bag.transform_lines(df_dev.loc[0:1000, "title"].values)
-y_true = df_dev.loc[0:1000, "category"]
+        y_test_pred = clf.predict(x_test)
+        #print(y_test_pred)
 
-res = classifier.predict(x_test)
-print(res)
+        accuracy = np.sum(y_test_pred == y_test) / len(y_test)
 
-accuracy = np.sum(res == y_true) / len(res)
-print(accuracy)
+        print("{1}: Training and predict using {0:2f} seconds".format(time.time() - start_time, clf_name))
+        print("{0:3f}".format(accuracy))
